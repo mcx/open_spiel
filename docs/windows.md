@@ -40,7 +40,7 @@ print("OpenSpiel is working!")
 If you need to build from source or contribute to the project:
 
 #### Prerequisites
-- **Python 3.10+** (get from [python.org](https://python.org))
+- **Python 3.11+** (get from [python.org](https://python.org))
 - **Git** (get from [git-scm.com](https://git-scm.com))
 - **CMake 3.15+** (get from [cmake.org](https://cmake.org))
 - **Visual Studio 2019 or later** with C++ development tools
@@ -87,7 +87,7 @@ pip install -e .
 
 ### Using with Conda
 ```bash
-conda create -n openspiel python=3.10
+conda create -n openspiel python=3.11
 conda activate openspiel
 pip install open-spiel
 ```
