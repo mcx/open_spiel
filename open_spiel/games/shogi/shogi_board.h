@@ -64,11 +64,10 @@ enum class PieceType : int8_t {
 	kRook = 8,
 	kLanceP = 9,
 	kKnightP = 10,
-	kSilver = 11,
+	kSilverP = 11,
 	kPawnP = 12,
 	kBishopP = 13,
-	kRookP = 14,
-  kQueen = 15, // TODO get rid of this
+	kRookP = 14
 };
 
 static inline constexpr std::array<PieceType, 10> kPieceTypes = {
@@ -163,8 +162,6 @@ struct Move {
   // Converts to long algebraic notation, as required by the UCI protocol.
   std::string ToLAN() const;
 
-  std::string ToSAN(const ShogiBoard& board) const;
-
 
   bool operator==(const Move& other) const {
     return from == other.from && to == other.to && piece == other.piece &&
@@ -183,8 +180,8 @@ std::pair<std::string, std::string> SplitAnnotations(const std::string& move);
 
 inline const std::string kDefaultStandardFEN =
     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-inline const std::string kDefaultSmallFEN = "r1kr/pppp/PPPP/R1KR w - - 0 1";
-
+inline const std::string kDefaultStandardiSFEN =
+  "lnsgkgsnl/1r5b1/p1ppppppp/9/9/9/P1PPPPPPP/1B5R1/LNSGKGSNL b - 1"
 using ObservationTable = std::array<bool, kNumSquares>;
 
 // Specifies policy for pseudo legal moves generation.
@@ -206,28 +203,27 @@ inline constexpr open_spiel::Action kPassAction = 0;
 inline const shogi::Move kPassMove = Move(
     Square{-1, -1}, Square{-1, -1}, Piece{Color::kEmpty, PieceType::kEmpty});
 
-int PocketIndex(PieceType ptype);
-
-PieceType PocketPieceType(int index);
 
 class Pocket {
  public:
   // Iteration support
   static constexpr std::array<PieceType, 7> PieceTypes() {
-    kBoardSize return {PieceType::kPawn, PieceType::kLance, PieceType::kKnight,
+    return {PieceType::kPawn, PieceType::kLance, PieceType::kKnight,
 			      PieceType::kSilver, PieceType::kGold, PieceType::kBishop,
             PieceType::kRook};
   }
 
   // Modifiers
-  void Increment(PieceType piece, int count);
+  void Increment(PieceType piece);
   void Decrement(PieceType piece);
 
   // Accessor
   int Count(PieceType piece) const;
 
   // Move encoding
-  static std::size_t Index(PieceType ptype);
+  static int Index(PieceType ptype);
+
+  static PieceType PocketPieceType(int index);
 
  private:
   static constexpr std::size_t kNumPocketPieces = 7;
@@ -269,9 +265,6 @@ class ShogiBoard {
   }
   void GenerateLegalMoves(const MoveYieldFn& yield, Color color) const;
 
-
-  // counts of pocket pieces by type
-  // Pawn, Knight, Bishop, Rook, Queen
   Pocket white_pocket_;  // counts of pocket pieces by type
   Pocket black_pocket_;
 
@@ -300,7 +293,7 @@ class ShogiBoard {
   // (see below). Returns absl::nullopt on failure.
   absl::optional<Move> ParseMove(const std::string& move) const;
 
-  // For both LAN and SAN we first check for a drop move with syntax like N@d4
+  // We first check for a drop move with syntax like N@d4
   // All drop moves are shown with a drop syntax, so Nd4 always mean a knight
   // on the board moved.
   absl::optional<Move> ParseDropMove(const std::string& move) const;
@@ -344,18 +337,6 @@ class ShogiBoard {
   bool IsEmptyOrEnemy(const Square& sq, Color our_color) const {
     const Piece& piece = board_[SquareToIndex_(sq)];
     return piece.color != our_color;
-  }
-
-  /* Whether the square is on the pawn starting rank for our_color. */
-  bool IsPawnStartingRank(const Square& sq, Color our_color) const {
-    return ((our_color == Color::kWhite && sq.y == 1) ||
-            (our_color == Color::kBlack && sq.y == (kBoardSize - 2)));
-  }
-
-  bool IsPawnPromotionRank(const Square& sq) const {
-    // No need to test for color here because a pawn can't be on the "wrong"
-    // promotion rank.
-    return sq.y == 0 || sq.y == (kBoardSize - 1);
   }
 
   /* Whether the sq is under attack by the opponent. */
@@ -410,19 +391,25 @@ class ShogiBoard {
   void GenerateKingDestinations_(Square sq, Color color,
                                  const YieldFn& yield) const;
 
-  template <typename YieldFn>
-  void GenerateQueenDestinations_(Square sq, Color color,
-                                  PseudoLegalMoveSettings settings,
-                                  const YieldFn& yield) const;
 
   template <typename YieldFn>
   void GenerateRookDestinations_(Square sq, Color color,
-                                 PseudoLegalMoveSettings settings,
+                                 const YieldFn& yield) const;
+
+  template <typename YieldFn>
+  void GenerateRookPDestinations_(Square sq, Color color,
                                  const YieldFn& yield) const;
 
   template <typename YieldFn>
   void GenerateBishopDestinations_(Square sq, Color color,
-                                   PseudoLegalMoveSettings settings,
+                                   const YieldFn& yield) const;
+
+  template <typename YieldFn>
+  void GenerateBishopPDestinations_(Square sq, Color color,
+                                   const YieldFn& yield) const;
+
+  template <typename YieldFn>
+  void GenerateLanceDestinations_(Square sq, Color color,
                                    const YieldFn& yield) const;
 
   template <typename YieldFn>
@@ -430,27 +417,24 @@ class ShogiBoard {
                                    const YieldFn& yield) const;
 
   template <typename YieldFn>
-  // Pawn moves without captures.
-  void GeneratePawnDestinations_(Square sq, Color color,
-                                 PseudoLegalMoveSettings settings,
-                                 const YieldFn& yield) const;
+  void GenerateSilverDestinations_(Square sq, Color color,
+                                   const YieldFn& yield) const;
 
   template <typename YieldFn>
-  // Pawn diagonal capture destinations, with or without en passant.
-  void GeneratePawnCaptureDestinations_(Square sq, Color color,
-                                        PseudoLegalMoveSettings settings,
-                                        bool include_ep,
-                                        const YieldFn& yield) const;
+  void GenerateGoldDestinations_(Square sq, Color color,
+                                   const YieldFn& yield) const;
+
+  template <typename YieldFn>
+  void GeneratePawnDestinations_(Square sq, Color color,
+                                 const YieldFn& yield) const;
 
   // Helper function.
   template <typename YieldFn>
   void GenerateRayDestinations_(Square sq, Color color,
-                                PseudoLegalMoveSettings settings,
                                 Offset offset_step, const YieldFn& yield) const;
 
   template <typename YieldFn>
   void GenerateDropDestinations_(Color player,
-                                 const PseudoLegalMoveSettings& settings,
                                  const YieldFn& yield) const;
 
   void SetMovenumber(int move_number);

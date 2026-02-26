@@ -32,7 +32,7 @@
 #include "open_spiel/abseil-cpp/absl/types/optional.h"
 #include "open_spiel/abseil-cpp/absl/types/span.h"
 #include "open_spiel/game_parameters.h"
-#include "open_spiel/games/chess/chess.h"
+#include "open_spiel/games/shogi/shogi.h"
 #include "open_spiel/games/shogi/shogi_board.h"
 #include "open_spiel/games/shogi/shogi_common.h"
 #include "open_spiel/observer.h"
@@ -179,7 +179,7 @@ Color PlayerToColor(Player p) {
 
 Action MoveToAction(const Move& move) {
 	if (move.drop){
-		int piece_index = PocketIndex(move.piece.type);
+		int piece_index = Pocket::Index(move.piece.type);
 		int action_int =  kNumBoardMoves + piece_index * kNumSquares
 			+ move.to.Index();
 		return static_cast<Action>(action_int);
@@ -208,7 +208,7 @@ Move ActionToMove(Action action, const ShogiBoard& board) {
 		int to = action % 81;
 		int piece_index = action / 81;
 		Square to_square = Square{to % kNumSquares, to / kNumSquares};
-		PieceType ptype = PocketPieceType(piece_index);
+		PieceType ptype = Pocket::PocketPieceType(piece_index);
 		Piece piece = {board.ToPlay(), ptype};
 		return Move(from_square, to_square, piece, false, true);
 	}
@@ -275,7 +275,6 @@ void ShogiState::ObservationTensor(Player player,
   AddScalarPlane(ColorToPlayer(Board().ToPlay()), 0, 1, value_it);
 
   // Pocket pieces.
-  // Order: Pawn, Knight, Bishop, Rook, Queen.
   // Maximum pocket count encoded in observation tensor.
   // Counts above this are saturated.
   // This does not affect gameplay.

@@ -101,34 +101,6 @@ inline Square operator+(const Square& sq, const Offset& offset) {
   return Square{x, y};
 }
 
-// This function takes an Offset which represents a relative chess move and
-// encodes it into an integer: the DestinationIndex. The encoding enumerates the
-// queen moves and then the knight moves. For chess, this results in the
-// following mapping:
-//  - [ 0, 13]: 14 vertical moves
-//  - [14, 27]: 14 horizontal moves
-//  - [28, 41]: 14 left downward or right upward diagonal moves
-//  - [42, 55]: 14 left upward or right downward diagonal moves
-//  - [56, 63]:  8 knight moves
-int OffsetToDestinationIndex(const Offset& offset,
-                             const std::array<Offset, 8>& knight_offsets);
-int OffsetToDestinationIndex(const Offset& offset,
-                             const std::array<Offset, 2>& knight_offsets);
-
-// Inverse function of OffsetToDestinationIndex
-Offset DestinationIndexToOffset(int destination_index,
-                                const std::array<Offset, 8>& knight_offsets);
-Offset DestinationIndexToOffset(int destination_index,
-                                const std::array<Offset, 2>& knight_offsets);
-
-// Encoding is:
-// i = (x * kBoardSize + y) * num_actions_destinations + destination_index
-// where x,y are the square coordinates.
-std::pair<Square, int> DecodeNetworkTarget(int i, int kBoardSize,
-                                           int num_actions_destinations);
-int EncodeNetworkTarget(const Square& from_square, int destination_index,
-                        int kBoardSize, int num_actions_destinations);
-
 // n-dimensional array of uniform random numbers.
 // Example:
 //   ZobristTable<int, 3, 4, 5> table;
