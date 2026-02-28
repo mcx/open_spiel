@@ -324,16 +324,16 @@ int ShogiState::NumRepetitions(const ShogiState& state) const {
 }
 
 std::pair<std::string, std::vector<std::string>>
-ShogiState::ExtractFenAndMaybeMoves() const {
-  std::string initial_fen = start_board_.ToFEN();
+ShogiState::ExtractSFenAndMaybeMoves() const {
+  std::string initial_sfen = start_board_.ToSFEN();
   std::vector<std::string> move_lans;
-  std::unique_ptr<State> state = ParentGame()->NewInitialState(initial_fen);
+  std::unique_ptr<State> state = ParentGame()->NewInitialState(initial_sfen);
   ShogiBoard board = down_cast<const ShogiState&>(*state).Board();
   for (const Move& move : moves_history_) {
     move_lans.push_back(move.ToLAN());
     board.ApplyMove(move);
   }
-  return std::make_pair(initial_fen, move_lans);
+  return std::make_pair(initial_sfen, move_lans);
 }
 
 absl::optional<std::vector<double>> ShogiState::MaybeFinalReturns() const {
@@ -366,10 +366,10 @@ absl::optional<std::vector<double>> ShogiState::MaybeFinalReturns() const {
 
 std::string ShogiState::Serialize() const {
   std::string state_str = "";
-  // If the specific_initial_fen is empty, the deserializer will use the
+  // If the specific_initial_sfen is empty, the deserializer will use the
   // default NewInitialState(). Otherwise, the deserializer will specify
-  // the specific initial fen by calling NewInitialState(string).
-  absl::StrAppend(&state_str, "FEN: ", specific_initial_sfen_, "\n");
+  // the specific initial sfen by calling NewInitialState(string).
+  absl::StrAppend(&state_str, "SFEN: ", specific_initial_sfen_, "\n");
   std::vector<Action> history = History();
   absl::StrAppend(&state_str, absl::StrJoin(history, "\n"), "\n");
   return state_str;
@@ -381,19 +381,19 @@ std::string ShogiState::StartSFEN() const {
 
 std::unique_ptr<State> ShogiGame::DeserializeState(
     const std::string& str) const {
-  const std::string prefix("FEN: ");
+  const std::string prefix("SFEN: ");
   if (!absl::StartsWith(str, prefix)) {
     // Backward compatibility.
     return Game::DeserializeState(str);
   }
   std::vector<std::string> lines = absl::StrSplit(str, '\n');
   int line_num = 0;
-  std::string fen = lines[line_num].substr(prefix.length());
+  std::string sfen = lines[line_num].substr(prefix.length());
   std::unique_ptr<State> state = nullptr;
-  if (fen.empty()) {
+  if (sfen.empty()) {
     state = NewInitialState();
   } else {
-    state = NewInitialState(fen);
+    state = NewInitialState(sfen);
   }
   line_num += 1;
   for (int i = line_num; i < lines.size(); ++i) {

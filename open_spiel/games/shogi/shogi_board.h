@@ -191,6 +191,7 @@ static inline constexpr std::array<PieceType, 13> kPieceTypes = {
 
 PieceType PromotedType(PieceType type);
 PieceType UnpromotedType(PieceType type);
+bool IsPromoted(PieceType type);
 
 // Case-insensitive.
 absl::optional<PieceType> PieceTypeFromChar(char c);
@@ -314,6 +315,8 @@ class Pocket {
 
   static PieceType PocketPieceType(int index);
 
+	bool Empty() const; 
+
  private:
   static constexpr std::size_t kNumPocketPieces = 7;
   // Internal storage: Pawn, Lance
@@ -349,6 +352,7 @@ class ShogiBoard {
   Square find(const Piece& piece) const;
 
   using MoveYieldFn = std::function<bool(const Move&)>;
+	void GeneratePseudoLegalMoves(const MoveYieldFn& yield, Color color) const;
   void GenerateLegalMoves(const MoveYieldFn& yield) const {
     GenerateLegalMoves(yield, to_play_);
   }
@@ -451,6 +455,8 @@ class ShogiBoard {
   bool IsBreachingMove(Move move) const;
   void BreachingMoveToCaptureMove(Move* move) const;
 
+	int CheckCount(Color player) const { return check_count_[static_cast<int>(player)]; }
+
  private:
   size_t SquareToIndex_(Square sq) const { return sq.y * kBoardSize + sq.x; }
 
@@ -539,6 +545,8 @@ class ShogiBoard {
   int32_t move_number_;
 
   uint64_t zobrist_hash_;
+
+	std::array<int, 2> check_count_ = {0, 0};
 };
 
 inline std::ostream& operator<<(std::ostream& stream,

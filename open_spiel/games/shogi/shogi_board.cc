@@ -75,6 +75,10 @@ PieceType UnpromotedType(PieceType type) {
 	return PieceType::kEmpty; // Does not unpromote
 }
 
+bool IsPromoted(PieceType type){
+	return UnpromotedType(type) != PieceType::kEmpty;
+}
+
 
 bool IsMoveCharacter(char c) {
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
@@ -169,7 +173,7 @@ std::string PieceTypeToString(PieceType p, bool uppercase) {
 
 std::string Piece::ToString() const {
   std::string base = PieceTypeToString(type);
-  return color == Color::kWhite ? absl::AsciiStrToUpper(base)
+  return color == Color::kBlack ? absl::AsciiStrToUpper(base)
                                 : absl::AsciiStrToLower(base);
 }
 
@@ -339,8 +343,37 @@ Square ShogiBoard::find(const Piece& piece) const {
   return kInvalidSquare;
 }
 
+void ShogiBoard::GenerateLegalMoves(const MoveYieldFn& yield,
+                                         Color color) const {
+	// Do not allow king in check
+  if (false) {
+    GeneratePseudoLegalMoves(yield, color);
+  } else {
+    auto king_square = find(Piece{color, PieceType::kKing});
 
-void ShogiBoard::GenerateLegalMoves(
+    GeneratePseudoLegalMoves(
+        [this, &king_square, &yield, color](const Move& move) {
+          // See if the move is legal by applying, checking whether the king is
+          // under attack, and undoing the move.
+          auto board_copy = *this;
+          board_copy.ApplyMove(move);
+
+          auto ks = king_square;
+          if (!(move.IsDropMove()) && at(move.from).type == PieceType::kKing) {
+            ks = move.to;
+          }
+          if (board_copy.UnderAttack(ks, color)) {
+            return true;
+          } else {
+            return yield(move);
+          }
+        },
+        color);
+  }
+}
+
+
+void ShogiBoard::GeneratePseudoLegalMoves(
     const MoveYieldFn& yield, Color color) const {
   bool generating = true;
 
@@ -368,7 +401,7 @@ void ShogiBoard::GenerateLegalMoves(
             GeneratePawnDestinations_(
                 sq, color,
                 [&yield, &piece, &sq, &generating, color](const Square& to) {
-								  if (!StuckPiece(color, piece, to.y)) {
+								  if (!StuckPiece(color, piece.type, to.y)) {
                     YIELD(Move(sq, to, piece));
 									}
 									if (InPromoZone(color, sq.y) || InPromoZone(color, to.y)) {
@@ -380,7 +413,7 @@ void ShogiBoard::GenerateLegalMoves(
             GenerateLanceDestinations_(
                 sq, color,
                 [&yield, &sq, &piece, &generating, color](const Square& to) {
-								  if (!StuckPiece(color, piece, to.y)) {
+								  if (!StuckPiece(color, piece.type, to.y)) {
                     YIELD(Move(sq, to, piece));
 									}
 									if (InPromoZone(color, sq.y) || InPromoZone(color, to.y)) {
@@ -392,7 +425,7 @@ void ShogiBoard::GenerateLegalMoves(
             GenerateKnightDestinations_(
                 sq, color,
                 [&yield, &sq, &piece, &generating, color](const Square& to) {
-								  if (!StuckPiece(color, piece, to.y)) {
+								  if (!StuckPiece(color, piece.type, to.y)) {
                     YIELD(Move(sq, to, piece));
 									}
 									if (InPromoZone(color, sq.y) || InPromoZone(color, to.y)) {
@@ -446,8 +479,8 @@ void ShogiBoard::GenerateLegalMoves(
           case PieceType::kBishop:
             GenerateBishopDestinations_(
                 sq, color,
-                [&yield, &sq, &piece, &generating](const Square& to) {
-                  YIELD(Move(sq, to, piece, color));
+                [&yield, &sq, &piece, &generating, color](const Square& to) {
+                  YIELD(Move(sq, to, piece));
 									if (InPromoZone(color, sq.y) || InPromoZone(color, to.y)) {
                      YIELD(Move(sq, to, piece, true));
 									}
@@ -481,8 +514,7 @@ void ShogiBoard::GenerateLegalMoves(
 // TODO forbid pawn drop with checkmate
 template <typename YieldFn>
 void ShogiBoard::GenerateDropDestinations_(
-    Color player, const PseudoLegalMoveSettings& settings,
-    const YieldFn& yield) const {
+    Color player, const YieldFn& yield) const {
   // Get the pocket for the player
   Pocket pocket = (player == Color::kWhite ? white_pocket_ : black_pocket_);
 
@@ -498,7 +530,7 @@ void ShogiBoard::GenerateDropDestinations_(
         if (at(sq) != kEmptyPiece) continue;
 
         // Cannot drop pieces that will never move
-				if StuckPiece(player, ptype, y) continue;
+				if (StuckPiece(player, ptype, y)) continue;
 				// check if already a pawn in column
 				bool pawn_already = false;
 				if (ptype == PieceType::kPawn){
@@ -511,12 +543,24 @@ void ShogiBoard::GenerateDropDestinations_(
 					}
 				}
         if (pawn_already) continue;
+				if (ptype == PieceType::kPawn){
+				// check for check
+				    int8_t front = (player == Color::kBlack) ? y + 1 : y - 1;
+						Piece there = at(Square{x, front});
+						if (there.type == PieceType::kKing && there.color != player) {
+							ShogiBoard board_copy = *this;
+							Move dropMove = Move({-1, -1},  {x, y},
+									Piece{player, PieceType::kPawn}, false, true);
+							board_copy.ApplyMove(dropMove);
+							if (!board_copy.HasLegalMoves()) continue;
+						}
+				}
         // Build the Move
         Move m;
         m.from = Square {-1, -1};
         m.to = sq;
-				m.piece = Piece{color, ptype};
-				m_promotion = true;
+				m.piece = Piece{player, ptype};
+				m.drop = true;
 
         // Output the move
         yield(m);
@@ -526,7 +570,7 @@ void ShogiBoard::GenerateDropDestinations_(
 }
 
 bool StuckPiece(Color player, PieceType ptype, int8_t y) {
-	if (player == Color::Black) {
+	if (player == Color::kBlack) {
 	 if ((ptype == PieceType::kPawn || ptype == PieceType::kLance) 
 			 && y == kBoardSize - 1) return true;
 	 if (ptype == PieceType::kKnight && 
@@ -541,8 +585,8 @@ bool StuckPiece(Color player, PieceType ptype, int8_t y) {
 }
 
 bool InPromoZone(Color player, int8_t y) {
-	if (player == Color::Black && y >= kBoardSize - 3) return true;
-	if (player == Color::White && y <= 2) return true;
+	if (player == Color::kBlack && y >= kBoardSize - 3) return true;
+	if (player == Color::kWhite && y <= 2) return true;
 	return false;
 }
 absl::optional<Move> ShogiBoard::ParseMove(const std::string& move) const {
@@ -685,8 +729,13 @@ void ShogiBoard::ApplyMove(const Move& move) {
     }
     AddToPocket(to_play_, dpt);
   }
+	if (InCheck()) {
+		check_count_[static_cast<int>(to_play_)] += 1;
+	} else {
+		check_count_[static_cast<int>(to_play_)] = 0;
+	}
 
-  if (to_play_ == Color::kBlack) {
+  if (to_play_ == Color::kWhite) {
     ++move_number_;
   }
 
@@ -724,7 +773,7 @@ bool ShogiBoard::UnderAttack(const Square& sq, Color our_color) const {
 
   // Rook moves
   GenerateRookDestinations_(
-      sq, our_color, PseudoLegalMoveSettings::kAcknowledgeEnemyPieces,
+      sq, our_color,
       [this, &under_attack, &opponent_color](const Square& to) {
         if (at(to) == Piece{opponent_color, PieceType::kRook}) {
           under_attack = true;
@@ -734,7 +783,7 @@ bool ShogiBoard::UnderAttack(const Square& sq, Color our_color) const {
     return true;
   }
   GenerateRookPDestinations_(
-      sq, our_color, PseudoLegalMoveSettings::kAcknowledgeEnemyPieces,
+      sq, our_color,
       [this, &under_attack, &opponent_color](const Square& to) {
         if (at(to) == Piece{opponent_color, PieceType::kRookP}) {
           under_attack = true;
@@ -746,7 +795,7 @@ bool ShogiBoard::UnderAttack(const Square& sq, Color our_color) const {
 
   // Bishop moves
   GenerateBishopDestinations_(
-      sq, our_color, PseudoLegalMoveSettings::kAcknowledgeEnemyPieces,
+      sq, our_color,
       [this, &under_attack, &opponent_color](const Square& to) {
         if (at(to) == Piece{opponent_color, PieceType::kBishop}) {
           under_attack = true;
@@ -756,7 +805,7 @@ bool ShogiBoard::UnderAttack(const Square& sq, Color our_color) const {
     return true;
   }
   GenerateBishopPDestinations_(
-      sq, our_color, PseudoLegalMoveSettings::kAcknowledgeEnemyPieces,
+      sq, our_color,
       [this, &under_attack, &opponent_color](const Square& to) {
         if (at(to) == Piece{opponent_color, PieceType::kBishop}) {
           under_attack = true;
@@ -785,7 +834,7 @@ bool ShogiBoard::UnderAttack(const Square& sq, Color our_color) const {
   if (under_attack) {
     return true;
   }
-  GenerateSliverDestinations_(
+  GenerateSilverDestinations_(
       sq, our_color, [this, &under_attack, &opponent_color](const Square& to) {
         if ((at(to) == Piece{opponent_color, PieceType::kSilver})) {
           under_attack = true;
@@ -822,7 +871,7 @@ bool ShogiBoard::UnderAttack(const Square& sq, Color our_color) const {
 
 std::string ShogiBoard::DebugString(bool shredder_fen) const {
   std::string s;
-  s = absl::StrCat("FEN: ", ToFEN(shredder_fen), "\n");
+  s = absl::StrCat("FEN: ", ToSFEN(), "\n");
   absl::StrAppend(&s, "\n  ---------------------------------\n");
   for (int8_t y = kBoardSize - 1; y >= 0; --y) {
     // Rank label.
@@ -870,32 +919,33 @@ void ShogiBoard::GenerateKingDestinations_(Square sq, Color color,
 
 template <typename YieldFn>
 void ShogiBoard::GenerateRookDestinations_(
-    Square sq, Color color, PseudoLegalMoveSettings settings,
+    Square sq, Color color,
     const YieldFn& yield) const {
-  GenerateRayDestinations_(sq, color, settings, {1, 0}, yield);
-  GenerateRayDestinations_(sq, color, settings, {-1, 0}, yield);
-  GenerateRayDestinations_(sq, color, settings, {0, 1}, yield);
-  GenerateRayDestinations_(sq, color, settings, {0, -1}, yield);
+  GenerateRayDestinations_(sq, color, {1, 0}, yield);
+  GenerateRayDestinations_(sq, color, {-1, 0}, yield);
+  GenerateRayDestinations_(sq, color, {0, 1}, yield);
+  GenerateRayDestinations_(sq, color, {0, -1}, yield);
 }
 
 template <typename YieldFn>
 void ShogiBoard::GenerateLanceDestinations_(
-    Square sq, Color color, PseudoLegalMoveSettings settings,
+    Square sq, Color color,
     const YieldFn& yield) const {
-	if (color == Color::Black) {
-    GenerateRayDestinations_(sq, color, settings, {1, 0}, yield);
+	if (color == Color::kBlack) {
+    GenerateRayDestinations_(sq, color, {1, 0}, yield);
 	} else {
-    GenerateRayDestinations_(sq, color, settings, {-1, 0}, yield);
+    GenerateRayDestinations_(sq, color, {-1, 0}, yield);
 	}
 }
 
 template <typename YieldFn>
 void ShogiBoard::GenerateGoldDestinations_(
-    Square sq, Color color, PseudoLegalMoveSettings settings,
+    Square sq, Color color,
     const YieldFn& yield) const {
 	int8_t y_direction = color == Color::kBlack ? 1 : -1;
 	static const std::array<Offset, 6> kGoldOffsets =
-	 {{0,  1}, {0, -1}, {1,  0}, {-1, 0}, {1,  1},{-1, 1}};
+	 {Offset{0,  1}, Offset{0, -1}, Offset{1,  0},
+		 Offset{-1, 0}, Offset{1,  1},Offset{-1, 1}};
   for (const auto& offset : kGoldOffsets) {
 		Offset real_offset = Offset{offset.x_offset, y_direction * offset.y_offset}; 
     Square dest = sq + real_offset;
@@ -907,12 +957,13 @@ void ShogiBoard::GenerateGoldDestinations_(
 
 template <typename YieldFn>
 void ShogiBoard::GenerateSilverDestinations_(
-    Square sq, Color color, PseudoLegalMoveSettings settings,
+    Square sq, Color color,
     const YieldFn& yield) const {
   int8_t y_direction = color == Color::kBlack ? 1 : -1;
   static const std::array<Offset, 5> kSilverOffsets =
-   {{1,  -1}, {1, 0}, {1,  1}, {-1, -1}, {-1, 1}};
-  for (const auto& offset : kGoldOffsets) {
+   {Offset{1,  -1}, Offset{1, 0}, Offset{1,  1},
+		 Offset{-1, -1}, Offset{-1, 1}};
+  for (const auto& offset : kSilverOffsets) {
     Offset real_offset = Offset{offset.x_offset, y_direction * offset.y_offset};
     Square dest = sq + real_offset;
     if (InBoardArea(dest) && IsEmptyOrEnemy(dest, color)) {
@@ -923,11 +974,11 @@ void ShogiBoard::GenerateSilverDestinations_(
 
 template <typename YieldFn>
 void ShogiBoard::GenerateKnightDestinations_(
-    Square sq, Color color, PseudoLegalMoveSettings settings,
+    Square sq, Color color,
     const YieldFn& yield) const {
   int8_t y_direction = color == Color::kBlack ? 1 : -1;
   static const std::array<Offset, 2> kKnightOffsets =
-   {{-1,  2}, {1, 2}};
+   {Offset{-1,  2}, Offset{1, 2}};
   for (const auto& offset : kKnightOffsets) {
     Offset real_offset = Offset{offset.x_offset, y_direction * offset.y_offset};
     Square dest = sq + real_offset;
@@ -939,7 +990,7 @@ void ShogiBoard::GenerateKnightDestinations_(
 
 template <typename YieldFn>
 void ShogiBoard::GeneratePawnDestinations_(
-    Square sq, Color color, PseudoLegalMoveSettings settings,
+    Square sq, Color color,
     const YieldFn& yield) const {
   int8_t y_direction = color == Color::kBlack ? 1 : -1;
   static const std::array<Offset, 1> kPawnOffsets =
@@ -956,10 +1007,10 @@ void ShogiBoard::GeneratePawnDestinations_(
 // Extra squares for promoted rook
 template <typename YieldFn>
 void ShogiBoard::GenerateRookPDestinations_(
-    Square sq, Color color, PseudoLegalMoveSettings settings,
+    Square sq, Color color,
     const YieldFn& yield) const {
   static const std::array<Offset, 4> kRookPOffsets =
-   {{-1,  -1}, {-1, 1}, {1, -1}, {1,1}};
+   {Offset{-1,  -1}, Offset{-1, 1}, Offset{1, -1}, Offset{1,1}};
   for (const auto& offset : kRookPOffsets) {
     Square dest = sq + offset;
     if (InBoardArea(dest) && IsEmptyOrEnemy(dest, color)) {
@@ -971,11 +1022,11 @@ void ShogiBoard::GenerateRookPDestinations_(
 // Extra squares for promoted bishop
 template <typename YieldFn>
 void ShogiBoard::GenerateBishopPDestinations_(
-    Square sq, Color color, PseudoLegalMoveSettings settings,
+    Square sq, Color color,
     const YieldFn& yield) const {
   static const std::array<Offset, 4> kBishopPOffsets =
-   {{-1,  -1}, {-1, 1}, {1, -1}, {1,1}};
-  for (const auto& offset : kBishopPoffsets) {
+   {Offset{-1,  -1}, Offset{-1, 1}, Offset{1, -1}, Offset{1,1}};
+  for (const auto& offset : kBishopPOffsets) {
     Square dest = sq + offset;
     if (InBoardArea(dest) && IsEmptyOrEnemy(dest, color)) {
       yield(dest);
@@ -986,18 +1037,17 @@ void ShogiBoard::GenerateBishopPDestinations_(
 
 template <typename YieldFn>
 void ShogiBoard::GenerateBishopDestinations_(
-    Square sq, Color color, PseudoLegalMoveSettings settings,
+    Square sq, Color color,
     const YieldFn& yield) const {
-  GenerateRayDestinations_(sq, color, settings, {1, 1}, yield);
-  GenerateRayDestinations_(sq, color, settings, {-1, 1}, yield);
-  GenerateRayDestinations_(sq, color, settings, {1, -1}, yield);
-  GenerateRayDestinations_(sq, color, settings, {-1, -1}, yield);
+  GenerateRayDestinations_(sq, color, {1, 1}, yield);
+  GenerateRayDestinations_(sq, color, {-1, 1}, yield);
+  GenerateRayDestinations_(sq, color, {1, -1}, yield);
+  GenerateRayDestinations_(sq, color, {-1, -1}, yield);
 }
 
 
 template <typename YieldFn>
 void ShogiBoard::GenerateRayDestinations_(Square sq, Color color,
-                                               PseudoLegalMoveSettings settings,
                                                Offset offset_step,
                                                const YieldFn& yield) const {
   for (Square dest = sq + offset_step; InBoardArea(dest); dest += offset_step) {
@@ -1005,9 +1055,7 @@ void ShogiBoard::GenerateRayDestinations_(Square sq, Color color,
       yield(dest);
     } else if (IsEnemy(dest, color)) {
       yield(dest);
-      if (settings == PseudoLegalMoveSettings::kAcknowledgeEnemyPieces) {
-        break;
-      }
+      break;
     } else {
       // We have a friendly piece.
       break;
@@ -1015,8 +1063,8 @@ void ShogiBoard::GenerateRayDestinations_(Square sq, Color color,
   }
 }
 
-std::string ShogiBoard::ToSFEN(bool /*shredder*/) const {
-  std::string fen;
+std::string ShogiBoard::ToSFEN() const {
+  std::string sfen;
 
   // 1. Board
   for (int y = kBoardSize - 1; y >= 0; --y) {
@@ -1031,42 +1079,46 @@ std::string ShogiBoard::ToSFEN(bool /*shredder*/) const {
       }
 
       if (empty > 0) {
-        fen += std::to_string(empty);
+        sfen += std::to_string(empty);
         empty = 0;
       }
+      bool upper = (p.color == Color::kBlack);
+			sfen += PieceTypeToString(p.type, upper);
 
-      if (IsPromoted(p.type)) {
-        fen += '+';
-        fen += PieceChar(UnpromotedType(p.type), p.color);
-      } else {
-        fen += PieceChar(p.type, p.color);
-      }
-    }
+			if (empty > 0) {
+				sfen += std::to_string(empty);
+			}
 
-    if (empty > 0) {
-      fen += std::to_string(empty);
-    }
-
-    if (y > 0) fen += '/';
+			if (y > 0) sfen += '/';
+		}
   }
 
   // 2. Side
-  fen += ' ';
-  fen += (ToPlay() == Color::kBlack ? 'b' : 'w');
+  sfen += ' ';
+  sfen += (ToPlay() == Color::kBlack ? 'b' : 'w');
 
   // 3. Hands
-  fen += ' ';
-  if (BothPocketsEmpty()) {
-    fen += '-';
+  sfen += ' ';
+  if (white_pocket_.Empty() && black_pocket_.Empty()) {
+    sfen += '-';
   } else {
-    AppendHands(fen);
+		for (bool upper:{true, false}) {
+			Pocket pocket = upper ? black_pocket_ : white_pocket_;
+			for (PieceType pt : Pocket::PieceTypes()) {
+				int count = pocket.Count(pt);
+				if (count > 0) {
+						if (count > 1) sfen += std::to_string(count);
+						sfen += PieceTypeToString(pt,upper);
+				}
+			}
+		}
   }
 
   // 4. Move number
-  fen += ' ';
-  fen += std::to_string(move_number_);
+  sfen += ' ';
+  sfen += std::to_string(move_number_);
 
-  return fen;
+  return sfen;
 }
 
 // For purposes of the hash
@@ -1092,7 +1144,7 @@ void ShogiBoard::AddToPocket(Color owner, PieceType piece) {
 	zobrist_hash_ ^=
 			kPocketZobrist[ToInt(owner)][Pocket::Index(piece)][new_hash];
 
-	pocket.Increment(piece, 1);
+	pocket.Increment(piece);
 }
 
 void ShogiBoard::RemoveFromPocket(Color owner, PieceType piece) {
@@ -1107,9 +1159,9 @@ void ShogiBoard::RemoveFromPocket(Color owner, PieceType piece) {
 
   if (old_hash != new_hash) {
     zobrist_hash_ ^=
-        kPocketZobrist[ToInt(owner)][Pocket:Index(piece)][old_hash];
+        kPocketZobrist[ToInt(owner)][Pocket::Index(piece)][old_hash];
     zobrist_hash_ ^=
-        kPocketZobrist[ToInt(owner)][Pocket:Index(piece)][new_hash];
+        kPocketZobrist[ToInt(owner)][Pocket::Index(piece)][new_hash];
   }
 
   pocket.Decrement(piece);
@@ -1148,12 +1200,7 @@ void ShogiBoard::SetMovenumber(int move_number) {
   move_number_ = move_number;
 }
 
-std::string DefaultFen() {
-    return shogi::kDefaultStandardFEN;
-}
-
-
-static Pocket::PieceType PocketPieceType(int index){
+PieceType Pocket::PocketPieceType(int index){
   switch (index) {
 		case 0:
       return PieceType::kPawn;
@@ -1170,8 +1217,8 @@ static Pocket::PieceType PocketPieceType(int index){
 		case 6:
       return PieceType::kRook;
     default: {
-      SpielFatalError(absl::StrCat("Invalid PieceType for Pocket: ",
-                                   static_cast<int>(ptype)));
+      SpielFatalError(absl::StrCat("Invalid Index for Pocket: ",
+                                   index));
     }
       return PieceType::kPawn;  // Never happens.
   }
@@ -1191,7 +1238,7 @@ void Pocket::Decrement(PieceType piece) {
 
 int Pocket::Count(PieceType piece) const { return counts_[Index(piece)]; }
 
-static Pocket::Index(PieceType ptype) {
+int Pocket::Index(PieceType ptype) {
   switch (ptype) {
     case PieceType::kPawn:
       return 0;
@@ -1213,6 +1260,13 @@ static Pocket::Index(PieceType ptype) {
     }
       return 0;  // never happens
   }
+}
+
+bool Pocket::Empty() const {
+  for (PieceType pt : Pocket::PieceTypes()) {
+     if (Count(pt) != 0) return false;    
+  }
+	return true;
 }
 
 }  // namespace shogi

@@ -135,7 +135,7 @@ class ShogiState : public State {
 
   // Constructs a chess state at the given position in Forsyth-Edwards Notation.
   // https://en.wikipedia.org/wiki/Forsyth%E2%80%93Edwards_Notation
-  ShogiState(std::shared_ptr<const Game> game, const std::string& fen);
+  ShogiState(std::shared_ptr<const Game> game, const std::string& sfen);
   ShogiState(const ShogiState&) = default;
 
   ShogiState& operator=(const ShogiState&) = default;
@@ -188,8 +188,8 @@ class ShogiState : public State {
   // history.
   int NumRepetitions(const ShogiState& state) const;
 
-  // Get the FEN for this move and the list of moves in UCI format.
-  std::pair<std::string, std::vector<std::string>> ExtractFenAndMaybeMoves()
+  // Get the SFEN for this move and the list of moves in UCI format.
+  std::pair<std::string, std::vector<std::string>> ExtractSFenAndMaybeMoves()
       const;
 
   const ShogiGame* ParentGame() const {
@@ -245,8 +245,8 @@ class ShogiGame : public Game {
     return shogi::NumDistinctActions();
   }
   std::unique_ptr<State> NewInitialState(
-      const std::string& fen) const override {
-    return absl::make_unique<ShogiState>(shared_from_this(), fen);
+      const std::string& sfen) const override {
+    return absl::make_unique<ShogiState>(shared_from_this(), sfen);
   }
   std::unique_ptr<State> NewInitialState() const override {
     return absl::make_unique<ShogiState>(shared_from_this());
