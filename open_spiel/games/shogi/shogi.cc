@@ -223,7 +223,7 @@ Move ActionToMove(Action action, const ShogiBoard& board) {
 std::string ShogiState::ActionToString(Player player,
                                             Action action) const {
   Move move = ActionToMove(action, Board());
-  return move.ToLAN();
+  return move.ToString();
 }
 
 std::string ShogiState::DebugString() const {
@@ -337,7 +337,7 @@ ShogiState::ExtractSFenAndMaybeMoves() const {
   std::unique_ptr<State> state = ParentGame()->NewInitialState(initial_sfen);
   ShogiBoard board = down_cast<const ShogiState&>(*state).Board();
   for (const Move& move : moves_history_) {
-    move_lans.push_back(move.ToLAN());
+    move_lans.push_back(move.ToString());
     board.ApplyMove(move);
   }
   return std::make_pair(initial_sfen, move_lans);

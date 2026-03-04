@@ -190,17 +190,7 @@ absl::optional<Square> SquareFromString(const std::string& s) {
   return absl::nullopt;
 }
 
-
 std::string Move::ToString() const {
-  std::string extra;
-
-  if (promote) {
-		extra = "+";
-  }
-  return absl::StrCat(SquareToString(from), SquareToString(to), extra);
-}
-
-std::string Move::ToLAN() const {
   if (drop) {
     std::string move_text;
     PieceType from_type = piece.type;
@@ -577,7 +567,7 @@ void ShogiBoard::GenerateDropDestinations_(
 }
 
 bool StuckPiece(Color player, PieceType ptype, int8_t y) {
-	if (player == Color::kBlack) {
+	if (player == Color::kWhite) {
 	 if ((ptype == PieceType::kPawn || ptype == PieceType::kLance) 
 			 && y == kBoardSize - 1) return true;
 	 if (ptype == PieceType::kKnight && 
@@ -592,10 +582,12 @@ bool StuckPiece(Color player, PieceType ptype, int8_t y) {
 }
 
 bool InPromoZone(Color player, int8_t y) {
-	if (player == Color::kBlack && y >= kBoardSize - 3) return true;
-	if (player == Color::kWhite && y <= 2) return true;
+	if (player == Color::kWhite && y >= kBoardSize - 3) return true;
+	if (player == Color::kBlack && y <= 2) return true;
 	return false;
 }
+
+
 absl::optional<Move> ShogiBoard::ParseMove(const std::string& move) const {
   // First see if they are in the long form -
   // "anan" (eg. "e2e4") or "anana" (eg. "f7f8q")
@@ -939,9 +931,9 @@ void ShogiBoard::GenerateLanceDestinations_(
     Square sq, Color color,
     const YieldFn& yield) const {
 	if (color == Color::kBlack) {
-    GenerateRayDestinations_(sq, color, {1, 0}, yield);
+    GenerateRayDestinations_(sq, color, {0, -1}, yield);
 	} else {
-    GenerateRayDestinations_(sq, color, {-1, 0}, yield);
+    GenerateRayDestinations_(sq, color, {0, 1}, yield);
 	}
 }
 
@@ -949,7 +941,7 @@ template <typename YieldFn>
 void ShogiBoard::GenerateGoldDestinations_(
     Square sq, Color color,
     const YieldFn& yield) const {
-	int8_t y_direction = color == Color::kBlack ? 1 : -1;
+	int8_t y_direction = color == Color::kBlack ? -1 : 1;
 	static const std::array<Offset, 6> kGoldOffsets =
 	 {Offset{0,  1}, Offset{0, -1}, Offset{1,  0},
 		 Offset{-1, 0}, Offset{1,  1},Offset{-1, 1}};
@@ -967,7 +959,7 @@ template <typename YieldFn>
 void ShogiBoard::GenerateSilverDestinations_(
     Square sq, Color color,
     const YieldFn& yield) const {
-  int8_t y_direction = color == Color::kBlack ? 1 : -1;
+  int8_t y_direction = color == Color::kBlack ? -1 : 1;
   static const std::array<Offset, 5> kSilverOffsets =
    {Offset{1,  -1}, Offset{1, 0}, Offset{1,  1},
 		 Offset{-1, -1}, Offset{-1, 1}};
@@ -985,7 +977,7 @@ template <typename YieldFn>
 void ShogiBoard::GenerateKnightDestinations_(
     Square sq, Color color,
     const YieldFn& yield) const {
-  int8_t y_direction = color == Color::kBlack ? 1 : -1;
+  int8_t y_direction = color == Color::kBlack ? -1 : 1;
   static const std::array<Offset, 2> kKnightOffsets =
    {Offset{-1,  2}, Offset{1, 2}};
   for (const auto& offset : kKnightOffsets) {
@@ -1002,9 +994,9 @@ template <typename YieldFn>
 void ShogiBoard::GeneratePawnDestinations_(
     Square sq, Color color,
     const YieldFn& yield) const {
-  int8_t y_direction = color == Color::kBlack ? 1 : -1;
+  int8_t y_direction = color == Color::kBlack ? -1 : 1;
   static const std::array<Offset, 1> kPawnOffsets =
-   {{1,  0}};
+   {{0,  1}};
   for (const auto& offset : kPawnOffsets) {
     Offset real_offset = Offset{offset.x_offset,
 			 static_cast<int8_t>(y_direction * offset.y_offset)};
@@ -1136,7 +1128,7 @@ std::string ShogiBoard::ToSFEN() const {
 // we  will saturate the pocket piece count at 16,
 // although the actual piece count can go beyond that.
 static constexpr int kMaxPocketHashCount = 16;
-static const ZobristTableU64<2, 5, kMaxPocketHashCount + 1> kPocketZobrist(
+static const ZobristTableU64<2, 7, kMaxPocketHashCount + 1> kPocketZobrist(
     /*seed=*/2825712);
 
 inline int HashCount(int n) { return std::min(n, kMaxPocketHashCount); }

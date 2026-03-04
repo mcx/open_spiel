@@ -220,24 +220,29 @@ inline std::ostream& operator<<(std::ostream& stream, const Piece& p) {
   return stream << p.ToString();
 }
 
+// Shoigi coordinates are twisted and backwards from chess:
+// files (columns)  are numbers with 9 on the left
+// ranks (rows) ar letters ith 'i' at the bottom
+// black (first player, sente) is going 'up' but the y values decrease)
+
 inline absl::optional<int8_t> ParseRank(char c) {
-  if (c >= '1' && c <= '8') return c - '1';
+  if (c >= 'a' && c <= 'i') return 'i' - c;
   return absl::nullopt;
 }
 
 inline absl::optional<int8_t> ParseFile(char c) {
-  if (c >= 'a' && c <= 'h') return c - 'a';
+  if (c >= '1' && c <= '9') return '9' - c;
   return absl::nullopt;
 }
 
-// Maps y = [0, 7] to rank ["1", "8"].
+// Maps y = [0, 8] to rank ["1", "9"].
 inline std::string RankToString(int8_t rank) {
-  return std::string(1, '1' + rank);
+  return std::string(1, 'i' - rank);
 }
 
-// Maps x = [0, 7] to file ["a", "h"].
+// Maps x = [0, 8] to file ["a", "i"].
 inline std::string FileToString(int8_t file) {
-  return std::string(1, 'a' + file);
+  return std::string(1, '9' - file);
 }
 
 // Offsets for all possible knight moves.
@@ -270,9 +275,6 @@ struct Move {
     return drop;
   }
 
-  // Converts to long algebraic notation, as required by the UCI protocol.
-  std::string ToLAN() const;
-
 
   bool operator==(const Move& other) const {
     return from == other.from && to == other.to && piece == other.piece &&
@@ -297,7 +299,8 @@ using ObservationTable = std::array<bool, kNumSquares>;
 class Pocket {
  public:
   // Iteration support
-  static constexpr std::array<PieceType, 7> PieceTypes() {
+  static constexpr std::size_t kNumPocketPieces = 7;
+  static constexpr std::array<PieceType, kNumPocketPieces> PieceTypes() {
     return {PieceType::kPawn, PieceType::kLance, PieceType::kKnight,
 			      PieceType::kSilver, PieceType::kGold, PieceType::kBishop,
             PieceType::kRook};
@@ -318,7 +321,6 @@ class Pocket {
 	bool Empty() const; 
 
  private:
-  static constexpr std::size_t kNumPocketPieces = 7;
   // Internal storage: Pawn, Lance
   std::array<int, kNumPocketPieces> counts_{};
 };
