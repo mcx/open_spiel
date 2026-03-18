@@ -503,12 +503,11 @@ void ShogiBoard::GeneratePseudoLegalMoves(
 }
 
 
-// TODO forbid pawn drop with checkmate
 template <typename YieldFn>
 void ShogiBoard::GenerateDropDestinations_(
     Color player, const YieldFn& yield) const {
   // Get the pocket for the player
-  Pocket pocket = (player == Color::kWhite ? white_pocket_ : black_pocket_);
+	const Pocket& pocket = (player == Color::kWhite ? white_pocket_ : black_pocket_);
 
   // Loop over drop-capable piece types
   for (PieceType ptype : Pocket::PieceTypes()) {
@@ -534,7 +533,7 @@ void ShogiBoard::GenerateDropDestinations_(
 						}
 					}
 				}
-        if (pawn_already) continue;
+				if (pawn_already) continue;
 				if (ptype == PieceType::kPawn){
 				// check for check
 				    int8_t front = (player == Color::kBlack) ? y + 1 : y - 1;
@@ -720,11 +719,6 @@ void ShogiBoard::ApplyMove(const Move& move) {
     }
     AddToPocket(to_play_, dpt);
   }
-	if (InCheck()) {
-		check_count_[static_cast<int>(to_play_)] += 1;
-	} else {
-		check_count_[static_cast<int>(to_play_)] = 0;
-	}
 
   if (to_play_ == Color::kWhite) {
     ++move_number_;
@@ -957,7 +951,7 @@ void ShogiBoard::GenerateSilverDestinations_(
   int8_t y_direction = Forward(color);
   static const std::array<Offset, 5> kSilverOffsets =
    {Offset{-1,  1}, Offset{0, 1}, Offset{1,  1},
-		 Offset{-1, -1}, Offset{-1, -1}};
+		 Offset{-1, -1}, Offset{1, -1}};
   for (const auto& offset : kSilverOffsets) {
     Offset real_offset = Offset{offset.x_offset,
 			static_cast<int8_t>(y_direction * offset.y_offset)};

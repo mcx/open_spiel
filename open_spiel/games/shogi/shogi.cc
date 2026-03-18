@@ -43,8 +43,7 @@ namespace open_spiel {
 namespace shogi {
 namespace {
 
-constexpr int kNumReversibleMovesToDraw = 100;
-constexpr int kNumRepetitionsToDraw = 3;
+constexpr int kNumRepetitionsToEnd = 4;
 
 // Facts about the game
 const GameType kGameType {
@@ -141,7 +140,13 @@ void ShogiState::DoApplyAction(Action action) {
 
   Move move = ActionToMove(action, Board());
   moves_history_.push_back(move);
+	auto next_to_play = ColorToPlayer(Board().ToPlay());
   Board().ApplyMove(move);
+	if (InCheck()) {
+    check_count_[static_cast<int>(next_to_play)] += 1;
+  } else {
+    check_count_[static_cast<int>(next_to_play)] = 0;
+  }
   ++repetitions_[current_board_.HashValue()];
   cached_legal_actions_.reset();
 }
@@ -314,10 +319,11 @@ void ShogiState::UndoAction(Player player, Action action) {
   }
 }
 
-bool ShogiState::IsRepetitionDraw() const {
+
+bool ShogiState::IsRepetitionEnd() const {
   const auto entry = repetitions_.find(Board().HashValue());
   SPIEL_CHECK_FALSE(entry == repetitions_.end());
-  return entry->second >= kNumRepetitionsToDraw;
+  return entry->second >= kNumRepetitionsToEnd;
 }
 
 int ShogiState::NumRepetitions(const ShogiState& state) const {
@@ -345,26 +351,31 @@ ShogiState::ExtractSFenAndMaybeMoves() const {
 
 absl::optional<std::vector<double>> ShogiState::MaybeFinalReturns() const {
 
-  if (IsRepetitionDraw()) {
-    return std::vector<double>{DrawUtility(), DrawUtility()};
+  if (IsRepetitionEnd()) {
+		// Perpetual check repetion could occur either with a player giving check again
+		// or with the other player escaping to the same position. Either way checking player loses.
+		if ((check_count_[0] >= 6) || (check_count_[1] >= 6)) {
+			if (check_count_[0] >= 6) {
+				 	return std::vector<double>{LossUtility(), WinUtility()};
+			} else {
+				 	return std::vector<double>{WinUtility(), LossUtility()};
+			}
+		} else {
+        return std::vector<double>{DrawUtility(), DrawUtility()};
+		}
   }
   // Compute and cache the legal actions.
   MaybeGenerateLegalActions();
   SPIEL_CHECK_TRUE(cached_legal_actions_);
   bool have_legal_moves = !cached_legal_actions_->empty();
 
-  // If we don't have legal moves we are either stalemated or checkmated,
-  // depending on whether we are in check or not.
+  // No stalemate in shogi. Player with no legal moves loses.
   if (!have_legal_moves) {
-    if (!Board().InCheck()) {
-      return std::vector<double>{DrawUtility(), DrawUtility()};
-    } else {
-      std::vector<double> returns(NumPlayers());
-      auto next_to_play = ColorToPlayer(Board().ToPlay());
-      returns[next_to_play] = LossUtility();
-      returns[OtherPlayer(next_to_play)] = WinUtility();
-      return returns;
-    }
+		std::vector<double> returns(NumPlayers());
+		auto next_to_play = ColorToPlayer(Board().ToPlay());
+		returns[next_to_play] = LossUtility();
+		returns[OtherPlayer(next_to_play)] = WinUtility();
+		return returns;
   }
 
 

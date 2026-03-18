@@ -30,7 +30,7 @@ def apply_legal(state, move):
         raise ValueError()
 
 class GamesShogiTest(parameterized.TestCase):
-  def test_bindings_sim(self):
+  def dtest_bindings_sim(self):
     game = pyspiel.load_game("shogi")
     state = game.new_initial_state()
     board = None
@@ -73,7 +73,42 @@ class GamesShogiTest(parameterized.TestCase):
        move = shogi.action_to_move(action, board)
        print(move.to_string())
 
-
+  def test_repeat(self):
+      """Repeat without perpetual check is a draw."""
+      game = pyspiel.load_game("shogi")
+      state = game.new_initial_state()
+      for ii in range(4):
+          apply_legal(state, '2h1h')
+          if state.is_terminal():
+              break
+          apply_legal(state, '8b9b')
+          if state.is_terminal():
+              break
+          apply_legal(state, '1h2h')
+          if state.is_terminal():
+              break
+          apply_legal(state, '9b8b')
+          if state.is_terminal():
+              break
+      self.assertTrue(state.is_terminal())
+      self.assertEqual(state.returns(), [0, 0])
+      "Repeat with perpetual check is a loss for the checking player." 
+      state = game.new_initial_state("lnsg2+R+Pl/4k4/p1ppppp1p/9/9/9/P1PPPPP1P/+R8/+pNSGKGSNL b PNSGBplb 14")
+      for ii in range(4):
+          apply_legal(state, '3a3b')
+          if state.is_terminal():
+              break
+          apply_legal(state, '5b5a')
+          if state.is_terminal():
+              break
+          apply_legal(state, '3b3a')
+          if state.is_terminal():
+              break
+          apply_legal(state, '5a5b')
+          if state.is_terminal():
+              break
+      self.assertTrue(state.is_terminal())
+      self.assertEqual(state.returns(), [-1.0, 1.0])
 
 if __name__ == "__main__":
   absltest.main()

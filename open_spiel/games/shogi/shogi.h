@@ -47,9 +47,9 @@ inline constexpr double LossUtility() { return -1; }
 inline constexpr double DrawUtility() { return 0; }
 inline constexpr double WinUtility() { return 1; }
 
-inline constexpr int kFirstDropAction = 4674;
-// because of our encoding NumDistinctActions includes impossible pawn drops
-inline constexpr int NumDistinctActions() { return kFirstDropAction + 5 * 64; }
+inline constexpr int NumDistinctActions() {
+	return kNumBoardMoves + kNumPocketPieces * kNumSquares; 
+}
 
 // Keep the same value as for chess, nobody cares
 inline constexpr int MaxGameLength() { return 17695; }
@@ -157,9 +157,9 @@ class ShogiState : public State {
 
   std::string Serialize() const override;
 
-  // Draw can be claimed under the FIDE 3-fold repetition rule (the current
-  // board position has already appeared twice in the history).
-  bool IsRepetitionDraw() const;
+  // Shogi ends the game at the 4th position of a position.
+  // If the repetetion was a result of perpetual check, the checking player loses.
+  bool IsRepetitionEnd() const;
 
   // Returns the number of times the specified state has appeared in the
   // history.
@@ -198,6 +198,8 @@ class ShogiState : public State {
   // This SFEN string is used only when NewInitialState is called with a specific
   // initial SFEN.
   std::string specific_initial_sfen_;
+
+	std::array<int, 2> check_count_ = {0, 0};
 
   // RepetitionTable records how many times the given hash exists in the history
   // stack (including the current board).

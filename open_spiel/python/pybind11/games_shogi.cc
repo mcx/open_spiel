@@ -92,7 +92,7 @@ void open_spiel::init_pyspiel_games_shogi(py::module& m) {
   py::classh<ShogiState, State>(m, "ShogiState")
       .def("board", py::overload_cast<>(&ShogiState::Board))
       .def("debug_string", &ShogiState::DebugString)
-      .def("is_repetition_draw", &ShogiState::IsRepetitionDraw)
+      .def("is_repetition_end", &ShogiState::IsRepetitionEnd)
       .def("moves_history", py::overload_cast<>(&ShogiState::MovesHistory))
       // num_repetitions(state: ChogiState) -> int
       .def("num_repetitions", &ShogiState::NumRepetitions)

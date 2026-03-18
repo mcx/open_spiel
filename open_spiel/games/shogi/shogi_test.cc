@@ -77,4 +77,6 @@ void HashTest() {
 }  // namespace open_spiel
 
 int main(int argc, char** argv) {
+	open_spiel::shogi::BasicShogiTests();
+	open_spiel::shogi::ObservationTensorTests();
 }

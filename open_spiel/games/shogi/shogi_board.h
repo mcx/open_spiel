@@ -447,11 +447,6 @@ class ShogiBoard {
   // Modified to support promoted and pocket pieces.
   std::string ToSFEN() const;
 
-  bool IsBreachingMove(Move move) const;
-  void BreachingMoveToCaptureMove(Move* move) const;
-
-	int CheckCount(Color player) const { return check_count_[static_cast<int>(player)]; }
-
  private:
   size_t SquareToIndex_(const Square& sq) const { return sq.y * kBoardSize + sq.x; }
 
@@ -538,7 +533,6 @@ class ShogiBoard {
 
   uint64_t zobrist_hash_;
 
-	std::array<int, 2> check_count_ = {0, 0};
 };
 
 inline std::ostream& operator<<(std::ostream& stream,
