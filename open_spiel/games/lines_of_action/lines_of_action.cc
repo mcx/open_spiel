@@ -78,8 +78,11 @@ Player CellStateToPlayer(CellState cell_state) {
       return 0;
     case CellState::kWhite:
       return 1;
+    default:
+      return kInvalidPlayer;
   }
 }
+
 
 CellState PlayerToCellState(Player player) {
   switch (player) {

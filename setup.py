@@ -83,7 +83,9 @@ class BuildExt(build_ext):
         f"-DPython3_EXECUTABLE={sys.executable}",
         f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extension_dir}",
         "-DCMAKE_BUILD_TYPE=Release",
+        "-DOPEN_SPIEL_BUILDING_WHEEL=ON",
     ]
+
     
     # Platform-specific configuration
     if sys.platform.startswith("win"):
@@ -93,16 +95,15 @@ class BuildExt(build_ext):
           f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE={extension_dir}",
           "-A", "x64"
       ]
-      build_args = ["--config", "Release", "--", "/m"]
+    # Parallel build arguments
+    if sys.platform.startswith("win"):
+      build_args = ["--", "/m"]
     else:
-      # Unix-like systems
-      cxx = "clang++"
-      if os.environ.get("CXX") is not None:
-        cxx = os.environ.get("CXX")
+      cxx = os.environ.get("CXX", "clang++")
       cmake_args.append(f"-DCMAKE_CXX_COMPILER={cxx}")
       detected_jobs = os.cpu_count()
       jobs = max(detected_jobs or 1, 1)
-      build_args = [f"-j{jobs}"]
+      build_args = ["--parallel", str(jobs)]
     
     if not os.path.exists(self.build_temp):
       os.makedirs(self.build_temp)
@@ -113,12 +114,11 @@ class BuildExt(build_ext):
         env=env)
 
     # Build
-    if sys.platform.startswith("win"):
-      subprocess.check_call(["cmake", "--build", ".", "--target", "pyspiel"] + build_args,
-                            cwd=self.build_temp, env=env)
-    else:
-      subprocess.check_call(["make", "pyspiel"] + build_args,
-                            cwd=self.build_temp, env=env)
+    # Build using cmake --build for better portability
+    subprocess.check_call(
+        ["cmake", "--build", ".", "--target", "pyspiel", "--config", "Release"] + build_args,
+        cwd=self.build_temp, env=env)
+
 
 
 def _get_requirements(requirements_file):  # pylint: disable=g-doc-args
