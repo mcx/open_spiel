@@ -1,12 +1,17 @@
 name: Build Wheels (Windows)
 
 on:
-  push:
-    branches: [ master, main ]
-    tags: [ 'v*' ]
+  # Test the wheels for each PR to ensure the PR doesn't break them.
   pull_request:
-    branches: [ master, main ]
+    branches: [ master ]
+  # Workflow dispatch is a way to manually trigger workflows. This will be
+  # used to build and test the wheels manually for releases.
   workflow_dispatch:
+    inputs:
+      name:
+        description: 'Workflow dispatch (triggered manually)'
+        required: false
+        default: 'No name specified'
 
 jobs:
   build_wheels:
