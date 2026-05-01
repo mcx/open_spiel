@@ -41,7 +41,8 @@ pip install --upgrade -r requirements.txt
 
 # Seems to be an issue with the ppa install on Linux with Python 3.11 causing a timeout.
 # Solution appears to be disable IPv6.
-if [[ "$OS_PYTHON_VERSION" == "3.11" ]]; then
+OS=`uname -a | awk '{print $1}'`
+if [[ "$OS" = "Linux" && "$OS_PYTHON_VERSION" == "3.11" ]]; then
   sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1
   sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1
   sudo sysctl -w net.ipv6.conf.lo.disable_ipv6=1
